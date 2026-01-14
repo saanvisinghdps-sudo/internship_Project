@@ -7,6 +7,9 @@ class Location:
     def __str__(self):
         return f"the following location is: {self.name} and the latitude is {self.lat} and the longitude is {self.long}."
 
+    def __repr__(self):
+        return str(self)
+
 class Map:
     def __init__(self, name):
         self.name = name
@@ -54,40 +57,6 @@ class Map:
 
         print(f"Neighbours of {key}: {', '.join(self.neighbours[key])}")
 
-
-class Neighbours:
-    neighbours = {
-        "Paris": ["Lyon", "Marseille"],
-        "Lyon": ["Paris", "Marseille"],
-        "Marseille": ["Paris", "Lyon"],
-
-    def __str__(self):
-        return f"the following location is: {self.name} and the latitude is {self.lat} and the longitude is {self.long}."
-
-    def __repr__(self):
-        return str(self)
-    
-        "Tokyo": ["Satiama", "Kyoto"],
-        "Satiama": ["Tokyo", "Kyoto"],
-        "Kyoto": ["Satiama", "Tokyo"],
-
-        "Seattle": ["Portland", "San Francisco"],
-        "Portland": ["Seattle", "San Francisco"],
-        "San Francisco": ["Seattle", "Portland"],
-    }
-
-    def __init__(self, location1, location2):
-        self.__location1 = location1
-        self.__location2 = location2
-
-    def get_location1(self):
-        return self.__location1
-
-    def get_location2(self):
-        return self.__location2
-
-    def __str__(self):
-        return f"Neighbours: {self.__location1} and {self.__location2}."
 
 def Sample_Data():
     countries = {}
@@ -147,11 +116,6 @@ def Sample_Data():
             country_map.display_neighbours(loc_name)
 
     return countries
-
-    "Seattle":["Portland","San Franscisco"], # pyright: ignore[reportUndefinedVariable]
-    "Portland":["Seattle", "San Francisco"],
-    "San Francisco":["Seattle", "Portland"]
-}
     
 if __name__=="__main__":
     print(Sample_Data())
