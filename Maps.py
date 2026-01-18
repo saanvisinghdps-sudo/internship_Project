@@ -91,7 +91,7 @@ class Map:
     def bfs(self, root, destination):
         visited = set([root])
         queue = collections.deque([root]) 
-        parent = {root: "Paris"}
+        parent = {root: None}
 
         while queue:
             vertex = queue.popleft()                               
@@ -100,30 +100,17 @@ class Map:
                 current = destination
                 while current is not None:  
                     path.append(current)
-                    current = parent[current] 
+                    current = parent.get(current) 
                 path.reverse()
                 print(f"Shortest path from {root} to {destination}: {' -> '.join(path)}")
+                print(f"the locations visited from Paris is: {visited}")
                 return path
-        for neighbour in self.neighbours.get(vertex, []):
-            if neighbour not in visited: 
-                visited.add(neighbour)
-                parent[neighbour] = vertex  
-                queue.append(neighbour) 
-        print(f"the locations visited from Paris is: {visited}")        
-
-        
-
-if __name__ == "__main__":
-    graph = {"Paris":["Lille","Lyon","Bordeaux","Strasbourg"], 
-            "Lille":["Amiens"], 
-            "Lyon": ["Paris", "Marseille"],
-            "Bordeaux": ["Toulouse","Rochelle"], 
-            "Rochelle":["Rennes","Bordeaux"], 
-            "Amiens":["Lille"],
-            "Strasbourg":["Paris"],
-            "Marseille":["Lyon"],
-            "Toulouse":["Bordeaux"],
-            "Rennes":["Rochelle"]}    
+            for neighbour in self.neighbours.get(vertex, []):
+                if neighbour not in visited: 
+                    visited.add(neighbour)
+                    parent[neighbour] = vertex  
+                    queue.append(neighbour) 
+               
 
 
 
@@ -160,10 +147,20 @@ def Sample_Data():
     france.add_neighbours(rochelle, bordeaux)
     france.add_neighbours(rochelle, rennes)   
     france.check_invariants()
-
+    countries["France"] = france
     france.bfs("Paris", "Rochelle")
    
-    countries["France"] = france
+    graph = {"Paris":["Lille","Lyon","Bordeaux","Strasbourg"], 
+            "Lille":["Amiens"], 
+            "Lyon": ["Paris", "Marseille"],
+            "Bordeaux": ["Toulouse","Rochelle"], 
+            "Rochelle":["Rennes","Bordeaux"], 
+            "Amiens":["Lille"],
+            "Strasbourg":["Paris"],
+            "Marseille":["Lyon"],
+            "Toulouse":["Bordeaux"],
+            "Rennes":["Rochelle"]}    
+
     
     # Japan
     '''japan = Map("Japan")
@@ -196,7 +193,7 @@ def Sample_Data():
     countries["USA"] = usa'''
 
     # Now display all
-    """
+    
     for country_name, country_map in countries.items():
         print(f"\n{country_name}:")
         country_map.display_locations()
@@ -205,9 +202,10 @@ def Sample_Data():
         for loc_name in country_map.neighbours.keys():
             country_map.display_neighbours(loc_name)
 
-    return countries#"""
+    return countries
     
-if __name__=="__main__":   
+if __name__=="__main__":    
+ 
     Sample_Data()
     
     
