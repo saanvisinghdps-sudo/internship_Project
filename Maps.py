@@ -20,6 +20,8 @@ class Location:
 
     def __repr__(self):
         return str(self)
+    
+from geopy.distance import geodesic    
 import collections
 
 class Map:
@@ -85,6 +87,20 @@ class Map:
             return
 
         print(f"Neighbours of {key}: {', '.join(self.neighbours[key])}")
+
+# creating a function to calculate the distance from one location to another location while considering its latitude and longitude 
+# Using Geopy
+# parameters: location1,location2,dist ---> its lat and long
+
+    def calculate_distance(self, location1, location2):
+        coord_1 = (location1.lat,location1.long)
+        coord_2 = (location2.lat,location2.long)
+
+        distance = geodesic(coord_1,coord_2).kilometers
+        return distance 
+
+
+
   
 #When it reaches the destination it. will stop 
 #Shortest path in an unweighted graph
@@ -130,14 +146,26 @@ def Sample_Data():
     lille = Location("Lille", 50.6292, 3.05725)
     amiens = Location("Amiens", 49.894066, 2.2957)
 
-    cities = [paris, lyon, marseille, bordeaux, toulouse, rochelle, rennes, strasbourg, lille, amiens]
+    cities =[paris, lyon, marseille, bordeaux, toulouse, rochelle, rennes, strasbourg, lille, amiens]
 
 
     for loc in cities:
        france.add_location(loc)
+# Calculating the distances based on the the neibouring locations 
+#  Creating a neighbours pair
 
+    neighbour_pair={"Paris-Lyon":(paris, lyon),
+                    "Lyon-Marseilles": (lyon, marseille),
+                    "Paris-Strasbourg": (paris, strasbourg),
+                    "Lille-Amiens": (lille, amiens),
+                    "Paris-Lille":(paris, lille),
+                    "Paris-Bordeaux": (paris, bordeaux),
+                    "Bordeaux-Toulouse":(bordeaux, toulouse),
+                    "Rochelle-Bordeaux": (rochelle, bordeaux),
+                    "Rochelle-Rennes": (rochelle, rennes)}
+    
         
-    france.add_neighbours(paris, lyon)
+    '''france.add_neighbours(paris, lyon)
     france.add_neighbours(lyon, marseille)
     france.add_neighbours(paris, strasbourg)
     france.add_neighbours(lille, amiens)
@@ -145,10 +173,23 @@ def Sample_Data():
     france.add_neighbours(paris, bordeaux)
     france.add_neighbours(bordeaux, toulouse)
     france.add_neighbours(rochelle, bordeaux)
-    france.add_neighbours(rochelle, rennes)   
+    france.add_neighbours(rochelle, rennes)   '''
     france.check_invariants()
     countries["France"] = france
     france.bfs("Paris", "Rochelle")
+
+    for pair_name, (loc1,loc2) in neighbour_pair.items():
+        france.add_neighbours(loc1,loc2)
+
+    for pair_name, (loc1,loc2) in neighbour_pair.items():
+        dist = france.calculate_distance(loc1, loc2)
+        print(f"{pair_name}: {dist:.2f} km")
+
+
+    '''dist = france.calculate_distance(paris, bordeaux)
+    print(f"Paris to Bordeaux: {dist:.2f} km\n")'''
+
+
    
     graph = {"Paris":["Lille","Lyon","Bordeaux","Strasbourg"], 
             "Lille":["Amiens"], 
