@@ -1,11 +1,6 @@
 import streamlit as st
 from streamlit_folium import st_folium
-
-# import your classes / Sample_Data from your code file
-# If your code is in a file called france_map.py, then do:
-# from france_map import Sample_Data
-
-from maps import Sample_Data, Map, Location # <-- change this
+from Maps import Sample_Data, Map, Location
 
 
 st.set_page_config(page_title="France Route Finder", layout="wide")
