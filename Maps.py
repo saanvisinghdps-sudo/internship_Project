@@ -320,10 +320,6 @@ def Sample_Data():
     france.to_folium("france_bfs.html", highlight_path = path_bfs)
     france.to_folium("france_dijkstra.html", highlight_path = path_dij)
 
-    webbrowser.open("file://" + os.path.abspath("france_network.html"))
-    webbrowser.open("file://" + os.path.abspath("france_bfs.html"))
-    webbrowser.open("file://" + os.path.abspath("france_dijkstra.html"))
-
     print("Maps created!")
     # Now display all
     
