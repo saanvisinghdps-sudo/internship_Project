@@ -1,9 +1,15 @@
+from geopy.distance import geodesic    
+import webbrowser
+import collections
+import heapq
+import folium
+import os
+
 class Location:
     def __init__(self, name, latitude, longitude):
         self.name = name
         self.lat = latitude
         self.long = longitude
-        self.check_invariants()
     
     def check_invariants(self):
         if not isinstance(self.name,str):
@@ -16,30 +22,24 @@ class Location:
             raise TypeError(f"The longitude should be a integer or float, got {type(self.long).__name__}")
 
     def __str__(self):
-        return f"the following location is: {self.name} and the latitude is {self.lat} and the longitude is {self.long}."
+        return repr(self)
 
     def __repr__(self):
-        return str(self)
-    
-from geopy.distance import geodesic    
-import collections
-import heapq
-
+        return f"({self.name}, {self.lat}, {self.long})"
 
 class Map:
     def __init__(self, name):
         self.name = name
         self.locations = {}          
         self.neighbours = {}   
-        self.check_invariants()  
 
-    def connect_nearest_loc(map_obj, k =3):
+    def connect_nearest_loc(map_obj, k = 3):
         names = list(map_obj.locations.keys())
-        k = max(1,min(k,len(names)-1))
+        k = max(0, min(k, len(names) - 1))
         for name in names:
             loc = map_obj.locations[name]
-
             dists = []
+
             for other_name in names:
                 if other_name == name:
                     continue
@@ -52,16 +52,10 @@ class Map:
 
             for _, other_name in nearest:
                 map_obj.add_neighbours(loc, map_obj.locations[other_name])     
-                      
 
-    def to_folium(self, output_html="map.html", highlight_path=None): 
-        import folium
-        if not self.locations:
-            raise ValueError("No locations to plot")
-        
+    def to_folium(self, output_html = "map.html", highlight_path = None): 
         avg_lat = sum(loc.lat for loc in self.locations.values()) / len(self.locations)
         avg_lon = sum(loc.long for loc in self.locations.values()) / len(self.locations)
-        #Creating a Map
         m = folium.Map(location=[avg_lat, avg_lon], zoom_start=6, tiles="OpenStreetMap")
 
         #Add markers       
@@ -100,12 +94,12 @@ class Map:
 
             folium.PolyLine(
                 locations=path_coords,
+                color="#FF0000",
                 weight=6,
                 opacity=0.9,
             ).add_to(m)    
 
         m.save(output_html)
-        import os
         print("Saved map to:", os.path.abspath(output_html))  
         return output_html
 
@@ -140,57 +134,46 @@ class Map:
 
     def add_neighbours(self, location1, location2):
         if not (isinstance(location1, Location) and isinstance(location2, Location)):
-            print("No neighbours for this location")
-            return
+            raise ValueError("Invalid Location type")
 
         name1, name2 = location1.name, location2.name
 
-        dist = self.calculate_distance(location1, location2)
-        print(f"{name1}--{name2}: {dist:.2f} km")
-
         if name1 not in self.neighbours or name2 not in self.neighbours:
-            print("Both locations must be added to the map first")
-            return
-
+            raise ValueError("Nonexistent location for adding neighbours")
 
         if name2 not in self.neighbours[name1]:
             self.neighbours[name1].append(name2)
         if name1 not in self.neighbours[name2]:
             self.neighbours[name2].append(name1)
 
-
-
     def display_neighbours(self, location):
         if isinstance(location, Location):
             key = location.name
-            
         else:
+            # This doesn't look solid
             key = location
 
         if key not in self.neighbours:
-            print(f"There is no neighbouring location for {key}")
-            return
+            raise ValueError(f"There is no neighbouring location for {key}")
 
         print(f"Neighbours of {key}: {', '.join(self.neighbours[key])}")
 
 
-# creating a function to calculate the distance from one location to another location while considering its latitude and longitude 
-# Using Geopy
-# parameters: location1,location2,dist ---> its lat and long
-
+    # creating a function to calculate the distance from one location to another location while considering its latitude and longitude 
+    # Using Geopy
+    # parameters: location1,location2,dist ---> its lat and long
     def calculate_distance(self, location1, location2):
         coord_1 = (location1.lat,location1.long)
         coord_2 = (location2.lat,location2.long)
 
-        distance = geodesic(coord_1,coord_2).kilometers
+        distance = geodesic(coord_1,coord_2).meters
         return distance 
 
-# The Dijkstra Function-- which has 2 parameters containg starting and ending point
+    # The Dijkstra Function-- which has 2 parameters containg starting and ending point
     def dijkstra(self, start, destination):
-        # a weighted graph
         graph = {}
 
-    # A location name and its neighbour name should be present in the graph using for loop
+        # A location name and its neighbour name should be present in the graph using for loop
         for loc_name in self.neighbours.keys():
             graph[loc_name] = {}
 
@@ -198,7 +181,7 @@ class Map:
                 loc1 = self.locations[loc_name]
                 loc2 = self.locations[neighbour_name]
  
-    #Implementing weights(distances) into the graph from one node to another
+                #Implementing weights(distances) into the graph from one node to another
                 distances = self.calculate_distance(loc1,loc2)
                 graph[loc_name][neighbour_name] = distances
 
@@ -209,8 +192,8 @@ class Map:
 
 
         while queue:  
-        # inside the queue there should be a construction of a path and then provide the distances    
-         #printing the current node as it has the smallest distance    
+            # inside the queue there should be a construction of a path and then provide the distances    
+            # printing the current node as it has the smallest distance    
             current_distance, current_node = heapq.heappop(queue)      
 
             if current_node == destination:
@@ -220,16 +203,14 @@ class Map:
                     path.append(current)
                     current = parent.get(current) 
                 path.reverse()
-                print(f"Shortest path from {start} to {destination}: {' -> '.join(path)}")
-                print(f"Total distance: {distances[destination]:.2f} km")
                 return path, distances[destination]
         
 
-        #Skip if the current distance is already the shortest path
+            # Skip if the current distance is already the shortest path
             if current_distance > distances[current_node]:
                 continue
 
-        #Update if the new distance is shorter than the previous distance
+            # Update if the new distance is shorter than the previous distance
             for neighbor, weight in graph[current_node].items():
                 alt_distance = current_distance + weight
                 if alt_distance < distances[neighbor]:
@@ -239,8 +220,8 @@ class Map:
 
 
 
-#When it reaches the destination it. will stop 
-#Shortest path in an unweighted graph
+    # When it reaches the destination it. will stop 
+    # Shortest path in an unweighted graph
     def bfs(self, root, destination):
         visited = set([root])
         queue = collections.deque([root]) 
@@ -255,8 +236,6 @@ class Map:
                     path.append(current)
                     current = parent.get(current) 
                 path.reverse()
-                print(f"Shortest path from {root} to {destination}: {' -> '.join(path)}")
-                print(f"the locations visited from Paris is: {visited}")
                 return path
             for neighbour in self.neighbours.get(vertex, []):
                 if neighbour not in visited: 
@@ -264,16 +243,10 @@ class Map:
                     parent[neighbour] = vertex  
                     queue.append(neighbour) 
 
-
-          
-
-
 def Sample_Data():
-    
     countries = {}
-        # France
+    # France
     france = Map("France")
-
     paris = Location("Paris", 48.8566, 2.3522)
     marseille = Location("Marseille", 43.2965, 5.3698)
     lyon = Location("Lyon", 45.7640, 4.8357)
@@ -284,7 +257,6 @@ def Sample_Data():
     strasbourg = Location("Strasbourg", 48.5734, 7.7521)
     bordeaux = Location("Bordeaux", 44.8378, -0.5792)
     lille = Location("Lille", 50.6292, 3.0573)
-
     rennes = Location("Rennes", 48.1173, -1.6778)
     reims = Location("Reims", 49.2583, 4.0317)
     le_havre = Location("Le Havre", 49.4944, 0.1079)
@@ -295,7 +267,6 @@ def Sample_Data():
     angers = Location("Angers", 47.4784, -0.5632)
     nimes = Location("Nîmes", 43.8367, 4.3601)
     villeurbanne = Location("Villeurbanne", 45.7667, 4.8833)
-
     clermont_ferrand = Location("Clermont-Ferrand", 45.7772, 3.0870)
     le_mans = Location("Le Mans", 48.0061, 0.1996)
     aix_en_provence = Location("Aix-en-Provence", 43.5297, 5.4474)
@@ -306,7 +277,6 @@ def Sample_Data():
     annecy = Location("Annecy", 45.8992, 6.1294)
     perpignan = Location("Perpignan", 42.6887, 2.8948)
     metz = Location("Metz", 49.1193, 6.1757)
-
     besancon = Location("Besançon", 47.2378, 6.0241)
     orleans = Location("Orléans", 47.9029, 1.9093)
     caen = Location("Caen", 49.1829, -0.3707)
@@ -317,7 +287,6 @@ def Sample_Data():
     montauban = Location("Montauban", 44.0180, 1.3550)
     avignon = Location("Avignon", 43.9493, 4.8055)
     poitiers = Location("Poitiers", 46.5802, 0.3404)
-
     dunkirk = Location("Dunkerque", 51.0344, 2.3768)
     rochelle = Location("La Rochelle", 46.1591, -1.1517)
     chambery = Location("Chambéry", 45.5646, 5.9178)
@@ -336,87 +305,26 @@ def Sample_Data():
         besancon, orleans, caen, mulhouse, rouen, nancy, saint_denis, montauban, avignon, poitiers,
         dunkirk, rochelle, chambery, bayonne, pau, valence, cannes, ajaccio, colmar, beziers
     ]
-
-
     
     for loc in cities:
        france.add_location(loc)
     
 
-    '''france.add_neighbours(paris, lyon)
-    france.add_neighbours(lyon, marseille)
-    france.add_neighbours(paris, strasbourg)
-    france.add_neighbours(lille, amiens)
-    france.add_neighbours(paris, lille)
-    france.add_neighbours(paris, bordeaux)
-    france.add_neighbours(bordeaux, toulouse)
-    france.add_neighbours(rochelle, bordeaux)
-    france.add_neighbours(rochelle, rennes) '''
     france.connect_nearest_loc(k=3)  
     france.check_invariants()
     countries["France"] = france
     path_bfs = france.bfs("Paris", "Rochelle")
     path_dij,dist = france.dijkstra("Paris", "Rennes")
-    '''print("BFS path:", path_bfs)
-    print("Dijkstra path:", path_dij, "distance:", dist)'''
 
-    france.to_folium("france_network.html")                 # just network
-    france.to_folium("france_bfs.html", highlight_path= path_bfs)
-    france.to_folium("france_dijkstra.html", highlight_path= path_dij)
-    
-
-    import webbrowser
-    import os
+    france.to_folium("france_network.html")
+    france.to_folium("france_bfs.html", highlight_path = path_bfs)
+    france.to_folium("france_dijkstra.html", highlight_path = path_dij)
 
     webbrowser.open("file://" + os.path.abspath("france_network.html"))
     webbrowser.open("file://" + os.path.abspath("france_bfs.html"))
     webbrowser.open("file://" + os.path.abspath("france_dijkstra.html"))
 
     print("Maps created!")
-    graph = {"Paris":["Lille","Lyon","Bordeaux","Strasbourg"], 
-            "Lille":["Amiens"], 
-            "Lyon": ["Paris", "Marseille"],
-            "Bordeaux": ["Toulouse","Rochelle"], 
-            "Rochelle":["Rennes","Bordeaux"], 
-            "Amiens":["Lille"],
-            "Strasbourg":["Paris"],
-            "Marseille":["Lyon"],
-            "Toulouse":["Bordeaux"],
-            "Rennes":["Rochelle"]}    
-
-
-
-
-    # Japan
-    '''japan = Map("Japan")
-    tokyo = Location("Tokyo", 35.6762, 139.6503)
-    kyoto = Location("Kyoto", 35.0116, 135.7681)
-    saitama = Location("Saitama", 35.8857, 139.6682)  
-    
-    for loc in [tokyo, kyoto, saitama]:
-        japan.add_location(loc)
-    
-    japan.add_neighbours(tokyo, kyoto)
-    japan.add_neighbours(tokyo, saitama)
-    japan.add_neighbours(kyoto, saitama)
-    
-    countries["Japan"] = japan
-
-    # USA
-    usa = Map("USA")
-    seattle = Location("Seattle", 47.6062, -122.3321)
-    portland = Location("Portland", 45.5152, -122.6748)
-    sf = Location("San Francisco", 37.7749, -122.4194)
-    
-    for loc in [seattle, portland, sf]:
-        usa.add_location(loc)
-    
-    usa.add_neighbours(seattle, portland)
-    usa.add_neighbours(seattle, sf)
-    usa.add_neighbours(portland, sf)
-    
-    countries["USA"] = usa'''
-
     # Now display all
     
     for country_name, country_map in countries.items():
@@ -430,5 +338,4 @@ def Sample_Data():
     return countries
     
 if __name__=="__main__":    
-   
     Sample_Data()
