@@ -1,3 +1,4 @@
+
 import math
 import streamlit as st
 import folium
@@ -79,8 +80,10 @@ defaults = {
     "dest_click": None,
     "start_node": None,
     "dest_node": None,
-    "route_path": None,
-    "route_geo_m": None,
+    "fastest_path": None,
+    "shortest_path": None,
+    "fastest_cost": None,
+    "shortest_dist_m": None,
     "last_click_sig": None,
 }
 for k, v in defaults.items():
@@ -93,8 +96,10 @@ def reset_points():
     st.session_state.dest_click = None
     st.session_state.start_node = None
     st.session_state.dest_node = None
-    st.session_state.route_path = None
-    st.session_state.route_geo_m = None
+    st.session_state.fastest_path = None
+    st.session_state.shortest_path = None
+    st.session_state.fastest_cost = None
+    st.session_state.shortest_dist_m = None
     st.session_state.last_click_sig = None
 
 
@@ -102,15 +107,19 @@ def ensure_points_from_click(lat: float, lon: float):
     if st.session_state.start_click is None:
         st.session_state.start_click = (lat, lon)
         st.session_state.start_node = m.nearest_node(lat, lon)
-        st.session_state.route_path = None
-        st.session_state.route_geo_m = None
+        st.session_state.fastest_path = None
+        st.session_state.shortest_path = None
+        st.session_state.fastest_cost = None
+        st.session_state.shortest_dist_m = None
         return
 
     if st.session_state.dest_click is None:
         st.session_state.dest_click = (lat, lon)
         st.session_state.dest_node = m.nearest_node(lat, lon)
-        st.session_state.route_path = None
-        st.session_state.route_geo_m = None
+        st.session_state.fastest_path = None
+        st.session_state.shortest_path = None
+        st.session_state.fastest_cost = None
+        st.session_state.shortest_dist_m = None
         return
 
     return
@@ -165,12 +174,16 @@ def build_select_map():
 
 
 def build_route_map():
-    fmap = m.folium_route_map(st.session_state.route_path, max_points=2000)
+    fmap = m.folium_compare_routes(
+        fastest_path=st.session_state.fastest_path,
+        shortest_path=st.session_state.shortest_path,
+        max_points=2000,
+    )
     fmap.add_child(LatLngPopup())
     return fmap
 
 
-fmap = build_route_map() if st.session_state.route_path else build_select_map()
+fmap = build_route_map() if (st.session_state.fastest_path or st.session_state.shortest_path) else build_select_map()
 map_state = st_folium(fmap, height=650, width=None)
 
 clicked = map_state.get("last_clicked")
@@ -193,13 +206,16 @@ if compute:
         st.warning("Start and destination snapped to the same node. Click farther apart.")
     else:
         with st.spinner("Computing route..."):
-            path, _graph_cost = m.dijkstra(s, t)
+            fastest_path, fastest_cost = m.route(s, t, mode="cost")
+            shortest_path, shortest_dist_m = m.route(s, t, mode="distance")
 
-        if not path:
+        if not fastest_path and not shortest_path:
             st.error("No route found (graph may be disconnected).")
         else:
-            st.session_state.route_path = path
-            st.session_state.route_geo_m = path_distance_meters(m, path)
+            st.session_state.fastest_path = fastest_path
+            st.session_state.shortest_path = shortest_path
+            st.session_state.fastest_cost = fastest_cost if fastest_path else None
+            st.session_state.shortest_dist_m = shortest_dist_m if shortest_path else None
             st.rerun()
 
 
@@ -225,12 +241,26 @@ with info:
 
     with colB:
         st.subheader("Route")
-        if st.session_state.route_path:
-            st.success(f"Route found with {len(st.session_state.route_path):,} nodes.")
-            st.write(f"Geographic distance: **{st.session_state.route_geo_m/1000:.2f} km**")
-            if st.button("Clear route (keep points)"):
-                st.session_state.route_path = None
-                st.session_state.route_geo_m = None
+        if st.session_state.fastest_path or st.session_state.shortest_path:
+            if st.session_state.fastest_path:
+                st.success(f"Fastest route: {len(st.session_state.fastest_path):,} nodes")
+                st.write(f"Fastest route cost/weight: **{st.session_state.fastest_cost}**")
+            else:
+                st.warning("Fastest route: not found")
+
+            if st.session_state.shortest_path:
+                st.info(f"Shortest route: {len(st.session_state.shortest_path):,} nodes")
+                st.write(f"Shortest route distance: **{st.session_state.shortest_dist_m/1000:.2f} km**")
+            else:
+                st.warning("Shortest route: not found")
+
+            st.caption("Map colors: Fastest = red, Shortest = blue")
+
+            if st.button("Clear routes (keep points)"):
+                st.session_state.fastest_path = None
+                st.session_state.shortest_path = None
+                st.session_state.fastest_cost = None
+                st.session_state.shortest_dist_m = None
                 st.rerun()
         else:
             st.write("No route computed yet.")

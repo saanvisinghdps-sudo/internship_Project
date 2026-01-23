@@ -4,6 +4,20 @@ import math
 import folium
 
 
+def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance in meters."""
+    R = 6_371_000.0
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+
+    a = (
+        math.sin(dphi / 2) ** 2
+        + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
+    )
+    return 2 * R * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
 class Location:
     def __init__(self, name, latitude, longitude):
         self.name = str(name)
@@ -53,7 +67,11 @@ class Map:
                 self.neighbours[v].append(u)
             self.edge_weights[(v, u)] = float(cost)
 
-    # ---------- Fast shortest path (A*; Dijkstra when heuristic=0) ----------
+    def edge_distance_m(self, u: str, v: str) -> float:
+        """Geographic edge length in meters (computed from node coords)."""
+        (lat1, lon1) = self.coords[u]
+        (lat2, lon2) = self.coords[v]
+        return haversine_m(lat1, lon1, lat2, lon2)
 
     def _heuristic(self, a: str, b: str) -> float:
         """
@@ -68,19 +86,40 @@ class Map:
         dlon = (lon2 - lon1) * (111_320.0 * math.cos(math.radians(mean_lat)))
         return math.hypot(dlat, dlon)
 
-    def shortest_path(self, start: str, goal: str):
+    def _reconstruct(self, parent: dict[str, str | None], start: str, goal: str):
+        path = []
+        cur = goal
+        while cur is not None:
+            path.append(cur)
+            cur = parent.get(cur)
+        path.reverse()
+        if not path or path[0] != start:
+            return None
+        return path
+
+    def route(self, start: str, goal: str, mode: str = "cost"):
         """
-        Returns (path_list, total_cost).
-        Uses A* for speed with file edge costs.
+        Compute a route using either:
+          - mode="cost"     -> minimizes file edge weights (fastest, if weights represent time/cost)
+          - mode="distance" -> minimizes geographic distance (meters)
+
+        Returns (path_list, total_value).
+
+        Notes:
+          - For cost: uses Dijkstra (heuristic=0) to keep it correct even if costs aren't distances.
+          - For distance: uses A* with straight-line heuristic for speed.
         """
         if start not in self.locations or goal not in self.locations:
             return None, float("inf")
+
+        if mode not in ("cost", "distance"):
+            raise ValueError("mode must be 'cost' or 'distance'")
 
         open_heap = []
         heapq.heappush(open_heap, (0.0, start))
 
         g_score = {start: 0.0}
-        parent = {start: None}
+        parent: dict[str, str | None] = {start: None}
         closed = set()
 
         while open_heap:
@@ -91,45 +130,38 @@ class Map:
             closed.add(current)
 
             if current == goal:
-                path = []
-                cur = goal
-                while cur is not None:
-                    path.append(cur)
-                    cur = parent.get(cur)
-                path.reverse()
-                return path, g_score[goal]
+                return self._reconstruct(parent, start, goal), g_score[goal]
 
             for nb in self.neighbours.get(current, []):
                 if nb in closed:
                     continue
 
-                w = self.edge_weights.get((current, nb))
-                if w is None:
-                    continue
+                if mode == "cost":
+                    w = self.edge_weights.get((current, nb))
+                    if w is None:
+                        continue
+                    h = 0.0
+                else:
+                    w = self.edge_distance_m(current, nb)
+                    h = self._heuristic(nb, goal)
 
                 tentative = g_score[current] + w
                 if tentative < g_score.get(nb, float("inf")):
                     g_score[nb] = tentative
                     parent[nb] = current
-                    f = tentative + self._heuristic(nb, goal)
-                    heapq.heappush(open_heap, (f, nb))
+                    heapq.heappush(open_heap, (tentative + h, nb))
 
         return None, float("inf")
 
-    # keep your old method name
+    def shortest_path(self, start: str, goal: str):
+        """Backwards-compatible: treats the file weights as the thing to minimize."""
+        return self.route(start, goal, mode="cost")
+
     def dijkstra(self, start: str, destination: str):
         return self.shortest_path(start, destination)
 
-
-
-
     def folium_route_map(self, path: list[str], zoom_start: int = 13, max_points: int = 2000) -> folium.Map:
-        """
-        Draw only the route (fast). Also downsample to keep the map responsive.
-
-        max_points: limit number of points in polyline for performance.
-        """
-        # Downsample if path is huge
+        """Draw a single route."""
         if len(path) > max_points:
             step = max(1, len(path) // max_points)
             path = path[::step]
@@ -160,6 +192,84 @@ class Map:
         fmap.fit_bounds(coords)
         return fmap
 
+    def folium_compare_routes(
+        self,
+        fastest_path: list[str] | None,
+        shortest_path: list[str] | None,
+        zoom_start: int = 13,
+        max_points: int = 2000,
+    ) -> folium.Map:
+        """Draw two routes on one map with different colors."""
+
+        base_path = fastest_path or shortest_path
+        if not base_path:
+            return folium.Map(location=[52.52, 13.405], zoom_start=12, tiles="OpenStreetMap")
+
+        def downsample(p: list[str] | None):
+            if not p:
+                return None
+            if len(p) <= max_points:
+                return p
+            step = max(1, len(p) // max_points)
+            p2 = p[::step]
+            if p2[-1] != p[-1]:
+                p2.append(p[-1])
+            return p2
+
+        fastest_ds = downsample(fastest_path)
+        shortest_ds = downsample(shortest_path)
+
+        lat0, lon0 = self.coords[base_path[0]]
+        fmap = folium.Map(location=[lat0, lon0], zoom_start=zoom_start, tiles="OpenStreetMap")
+
+        start = base_path[0]
+        end = base_path[-1]
+
+        lat_s, lon_s = self.coords[start]
+        folium.Marker(
+            location=[lat_s, lon_s],
+            tooltip=f"Start: {start}",
+            popup=f"Start: {start}",
+            icon=folium.Icon(color="green"),
+        ).add_to(fmap)
+
+        lat_t, lon_t = self.coords[end]
+        folium.Marker(
+            location=[lat_t, lon_t],
+            tooltip=f"Destination: {end}",
+            popup=f"Destination: {end}",
+            icon=folium.Icon(color="red"),
+        ).add_to(fmap)
+
+        all_coords = []
+
+        if shortest_ds:
+            coords = [[self.coords[n][0], self.coords[n][1]] for n in shortest_ds]
+            folium.PolyLine(
+                coords,
+                color="blue",
+                weight=6,
+                opacity=0.85,
+                tooltip="Shortest (distance)",
+            ).add_to(fmap)
+            all_coords.extend(coords)
+
+        if fastest_ds:
+            coords = [[self.coords[n][0], self.coords[n][1]] for n in fastest_ds]
+            folium.PolyLine(
+                coords,
+                color="red",
+                weight=6,
+                opacity=0.85,
+                tooltip="Fastest (cost)",
+            ).add_to(fmap)
+            all_coords.extend(coords)
+
+        if all_coords:
+            fmap.fit_bounds(all_coords)
+
+        return fmap
+
     def _build_nearest_cache(self):
         """Build cached coordinate arrays for nearest-node lookup."""
         ids = list(self.coords.keys())
@@ -170,9 +280,6 @@ class Map:
     def nearest_node(self, lat: float, lon: float) -> str:
         """
         Return the node id in this graph closest to the given (lat, lon).
-
-        This does NOT require any markers or that the clicked point itself exists as a node.
-        We snap to the nearest node from graph.coords using a fast equirectangular distance.
         """
         if not self.coords:
             raise ValueError("No coordinates loaded; cannot find nearest node.")
@@ -186,7 +293,6 @@ class Map:
         best_i = 0
         best_d2 = float("inf")
 
-        # Equirectangular approximation: good for short distances and fast.
         for i, (lat_i, lon_i) in enumerate(zip(self._nn_lat_rad, self._nn_lon_rad)):
             x = (lon_i - lon0) * math.cos((lat_i + lat0) * 0.5)
             y = (lat_i - lat0)
@@ -196,6 +302,7 @@ class Map:
                 best_i = i
 
         return str(self._nn_ids[best_i])
+
 
 def parse_dimacs_coords(coords_path: str) -> dict[str, tuple[float, float]]:
     """
@@ -273,8 +380,6 @@ def load_dimacs_map(graph_path: str, coords_path: str, name: str = "Graph", add_
             m.add_edge(u, v, cost, add_reverse=add_reverse_edges)
 
     return m
-
-
 
 
 
