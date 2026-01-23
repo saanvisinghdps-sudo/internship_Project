@@ -1,5 +1,3 @@
-
-
 import heapq
 import math
 import folium
@@ -117,7 +115,8 @@ class Map:
     def dijkstra(self, start: str, destination: str):
         return self.shortest_path(start, destination)
 
-    # ---------- Folium route map (ONLY draws the route) ----------
+
+
 
     def folium_route_map(self, path: list[str], zoom_start: int = 13, max_points: int = 2000) -> folium.Map:
         """
@@ -155,9 +154,6 @@ class Map:
         folium.PolyLine(coords, weight=6, opacity=0.9).add_to(fmap)
         fmap.fit_bounds(coords)
         return fmap
-
-
-# ------------------ Parsing functions ------------------
 
 def parse_dimacs_coords(coords_path: str) -> dict[str, tuple[float, float]]:
     """
